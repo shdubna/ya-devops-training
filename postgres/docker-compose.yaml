@@ -1,0 +1,46 @@
+version: '3.7'
+services:
+
+  postgresql:
+    container_name: postgres
+    image: "postgres:15.5"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: "${pg_password}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${pg_app_database}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+    volumes:
+      - /storage/postgresql:/var/lib/postgresql/data
+      - /opt/bingo/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  bingo_init:
+    image: "cr.yandex/${registry_id}/bingo:20231121T1537"
+    command: "/bingo prepare_db"
+    restart: on-failure
+    volumes:
+      - /opt/bingo/config.yaml:/opt/bingo/config.yaml
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    links:
+      - postgresql
+
+  add_index:
+    image: "postgres:15.5"
+    restart: on-failure
+    entrypoint: [ "psql", "-h", "postgresql", "-U", "${pg_app_user}", "-d", "${pg_app_database}", "-a", "-f", "/opt/bingo/index.sql" ]
+    environment:
+      PGPASSWORD: ${pg_app_password}
+    volumes:
+      - /opt/bingo/index.sql:/opt/bingo/index.sql
+    links:
+      - postgresql
+    depends_on:
+      bingo_init:
+        condition: service_completed_successfully

@@ -1,0 +1,23 @@
+#cloud-config
+write_files:
+- content: |
+    student_email: ${student_email}
+    postgres_cluster:
+      hosts:
+      - address: postgresql
+        port: 5432
+      user: ${pg_app_user}
+      password: ${pg_app_password}
+      db_name: ${pg_app_database}
+      ssl_mode: disable
+      use_closest_node: false
+  path: /opt/bingo/config.yaml
+- content: |
+    CREATE USER ${pg_app_user} WITH PASSWORD '${pg_app_password}';
+    CREATE DATABASE ${pg_app_database} OWNER ${pg_app_user};
+  path: /opt/bingo/init.sql
+- content: |
+    CREATE INDEX IF NOT EXISTS movie_id on movies(id);
+    CREATE INDEX IF NOT EXISTS customer_id on customers(id);
+    CREATE INDEX IF NOT EXISTS session_id on sessions(id);
+  path: /opt/bingo/index.sql

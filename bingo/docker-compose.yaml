@@ -1,0 +1,63 @@
+version: '3.7'
+services:
+
+  bingo1:
+    container_name: "bingo1"
+    image: "cr.yandex/${registry_id}/bingo:20231121T1537"
+    command: "/bingo run_server"
+    restart: always
+    labels:
+      - "autoheal=true"
+    volumes:
+      - /opt/bingo/config.yaml:/opt/bingo/config.yaml
+      - /dev/null:/opt/bongo/logs/${logs_dir}/main.log
+    healthcheck:
+      test: [ "CMD", "/busybox/wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:${listen_port}/ping" ]
+      interval: 2s
+      retries: 3
+      start_period: 60s
+      timeout: 1s
+
+  bingo2:
+    container_name: "bingo2"
+    image: "cr.yandex/${registry_id}/bingo:20231121T1537"
+    command: "/bingo run_server"
+    restart: always
+    labels:
+      - "autoheal=true"
+    volumes:
+      - /opt/bingo/config.yaml:/opt/bingo/config.yaml
+      - /dev/null:/opt/bongo/logs/${logs_dir}/main.log
+    healthcheck:
+      test: [ "CMD", "/busybox/wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:${listen_port}/ping" ]
+      interval: 2s
+      retries: 3
+      start_period: 60s
+      timeout: 1s
+
+  nginx:
+    container_name: nginx
+    image: "nginx:1.25.3"
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - /opt/bingo/bingo.conf:/etc/nginx/conf.d/bingo.conf
+      - /opt/bingo/bingo.crt:/etc/nginx/conf.d/bingo.crt
+      - /opt/bingo/bingo.key:/etc/nginx/conf.d/bingo.key
+      - /opt/bingo/bingo.locations:/etc/nginx/conf.d/bingo.locations
+    links:
+      - bingo1
+      - bingo2
+
+  autoheal:
+    restart: always
+    image: willfarrell/autoheal
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: "autoheal"
+      AUTOHEAL_START_PERIOD: "60"
+      AUTOHEAL_INTERVAL: "5"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

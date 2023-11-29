@@ -1,0 +1,6 @@
+prefix = "cool"
+folder_id = "******"
+student_email = "email@yandex.ru"
+listen_port = 33059
+domain = "superapp.ya.ru"
+

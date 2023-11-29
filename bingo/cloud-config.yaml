@@ -1,0 +1,83 @@
+#cloud-config
+write_files:
+- content: |
+    student_email: ${student_email}
+    postgres_cluster:
+      hosts:
+      - address: ${postgres_host}.auto.internal
+        port: 5432
+      user: ${pg_app_user}
+      password: ${pg_app_password}
+      db_name: ${pg_app_database}
+      ssl_mode: disable
+      use_closest_node: false
+  path: /opt/bingo/config.yaml
+- content: |
+    upstream upstream_bingo {
+      server bingo1:${listen_port} weight=1 max_fails=5 fail_timeout=10s;
+      server bingo2:${listen_port} weight=1 max_fails=5 fail_timeout=10s;
+    }
+    
+    proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=all:64m inactive=2h max_size=2g;
+    limit_req_zone $binary_remote_addr zone=test:50m rate=120r/s;
+    
+    server {
+      listen 80;
+      server_name ${domain} default_server;
+    
+      include /etc/nginx/conf.d/bingo.locations;
+    }
+    
+    server {
+      listen 443 ssl;
+      listen 443 quic reuseport;
+      http2 on;
+      add_header alt-svc 'h3=":443"; ma=86400';
+      server_name ${domain} default_server;
+      ssl_certificate /etc/nginx/conf.d/bingo.crt;
+      ssl_certificate_key /etc/nginx/conf.d/bingo.key;
+      ssl_protocols TLSv1.2 TLSv1.3;
+      
+      include /etc/nginx/conf.d/bingo.locations;
+    }
+  path: /opt/bingo/bingo.conf
+- content: |
+    location = /long_dummy {
+      if ($request_method !~ ^(GET)$ ) {
+        return 405;
+      }
+      proxy_pass http://upstream_bingo;
+      proxy_cache all;
+      proxy_cache_valid any 30s;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+      proxy_next_upstream_tries 1;
+    }
+
+    location = /ping {
+      proxy_pass http://upstream_bingo;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+      proxy_next_upstream_tries 1;
+    }
+
+    location / {
+      limit_req zone=test burst=10;
+      proxy_pass http://upstream_bingo;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+      proxy_next_upstream_tries 1;
+    }
+  path: /opt/bingo/bingo.locations
+- content: |
+    ${indent(4, cert)}
+  path: /opt/bingo/bingo.crt
+- content: |
+    ${indent(4, private_key)}
+  path: /opt/bingo/bingo.key
